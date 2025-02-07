@@ -21,90 +21,66 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const mediaPath = __dirname + "/media";
+const mediaPath = `${__dirname}/media`;
+
+const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+async function startChat(history) {
+  return model.startChat({ history });
+}
+
+async function sendMessage(chat, message) {
+  const result = await chat.sendMessage(message);
+  console.log(result.response.text());
+}
+
+async function sendMessageStream(chat, message) {
+  const result = await chat.sendMessageStream(message);
+  for await (const chunk of result.stream) {
+    const chunkText = chunk.text();
+    process.stdout.write(chunkText);
+  }
+}
 
 async function chat() {
-  // [START chat]
-  // Make sure to include these imports:
-  // import { GoogleGenerativeAI } from "@google/generative-ai";
-  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const chat = model.startChat({
-    history: [
-      {
-        role: "user",
-        parts: [{ text: "Hello" }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "Great to meet you. What would you like to know?" }],
-      },
-    ],
-  });
-  let result = await chat.sendMessage("I have 2 dogs in my house.");
-  console.log(result.response.text());
-  result = await chat.sendMessage("How many paws are in my house?");
-  console.log(result.response.text());
-  // [END chat]
+  const history = [
+    { role: "user", parts: [{ text: "Hello" }] },
+    { role: "model", parts: [{ text: "Great to meet you. What would you like to know?" }] }
+  ];
+  const chat = await startChat(history);
+  
+  await sendMessage(chat, "I have 2 dogs in my house.");
+  await sendMessage(chat, "How many paws are in my house?");
 }
 
 async function chatStreaming() {
-  // [START chat_streaming]
-  // Make sure to include these imports:
-  // import { GoogleGenerativeAI } from "@google/generative-ai";
-  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const chat = model.startChat({
-    history: [
-      {
-        role: "user",
-        parts: [{ text: "Hello" }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "Great to meet you. What would you like to know?" }],
-      },
-    ],
-  });
-  let result = await chat.sendMessageStream("I have 2 dogs in my house.");
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    process.stdout.write(chunkText);
-  }
-  result = await chat.sendMessageStream("How many paws are in my house?");
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    process.stdout.write(chunkText);
-  }
-  // [END chat_streaming]
+  const history = [
+    { role: "user", parts: [{ text: "Hello" }] },
+    { role: "model", parts: [{ text: "Great to meet you. What would you like to know?" }] }
+  ];
+  const chat = await startChat(history);
+
+  await sendMessageStream(chat, "I have 2 dogs in my house.");
+  await sendMessageStream(chat, "How many paws are in my house?");
 }
 
 async function chatStreamingWithImages() {
-  // [START chat_streaming_with_images]
-  // Make sure to include these imports:
-  // import { GoogleGenerativeAI } from "@google/generative-ai";
-  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const chat = model.startChat();
+  const history = [
+    { role: "user", parts: [{ text: "Hello, I'm designing inventions. Can I show you one?" }] }
+  ];
+  const chat = await startChat(history);
 
-  let result = await chat.sendMessageStream("Hello, I'm designing inventions. Can I show you one?");
-  process.stdout.write('\n\nmodel:\n');
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    process.stdout.write(chunkText);
-  }
-  result = await chat.sendMessageStream(["What do you think about this design?", {
+  await sendMessageStream(chat, "Hello, I'm designing inventions. Can I show you one?");
+  
+  const imageData = {
     inlineData: {
       data: Buffer.from(fs.readFileSync(`${mediaPath}/jetpack.jpg`)).toString("base64"),
       mimeType: "image/jpeg",
     },
-  }]);
-  process.stdout.write('\n\nmodel:\n');
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    process.stdout.write(chunkText);
-  }
-  // [END chat_streaming_with_images]
+  };
+  
+  await sendMessageStream(chat, ["What do you think about this design?", imageData]);
 }
 
 async function runAll() {
