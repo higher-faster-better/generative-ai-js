@@ -3,7 +3,7 @@
  * Copyright 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *   http://www.apache.org/licenses/LICENSE-2.0
@@ -32,163 +32,105 @@ import {
 import { formatSystemInstruction } from "../requests/request-helpers";
 
 /**
- * Class for managing GoogleAI content caches.
- * @public
+ * Manages GoogleAI content caches.
  */
 export class GoogleAICacheManager {
-  constructor(
-    public apiKey: string,
-    private _requestOptions?: RequestOptions,
-  ) {}
+  constructor(public apiKey: string, private _requestOptions?: RequestOptions) {}
 
   /**
-   * Upload a new content cache
+   * Uploads a new content cache.
    */
-  async create(
-    createOptions: CachedContentCreateParams,
-  ): Promise<CachedContent> {
-    const newCachedContent: CachedContent = { ...createOptions };
+  async create(createOptions: CachedContentCreateParams): Promise<CachedContent> {
+    const newCachedContent = { ...createOptions };
+
     if (createOptions.ttlSeconds) {
       if (createOptions.expireTime) {
         throw new GoogleGenerativeAIRequestInputError(
-          "You cannot specify both `ttlSeconds` and `expireTime` when creating" +
-            " a content cache. You must choose one.",
+          "Cannot specify both `ttlSeconds` and `expireTime`. Choose one."
         );
       }
-      if (createOptions.systemInstruction) {
-        newCachedContent.systemInstruction = formatSystemInstruction(
-          createOptions.systemInstruction,
-        );
-      }
-      newCachedContent.ttl = createOptions.ttlSeconds.toString() + "s";
-      delete (newCachedContent as CachedContentCreateParams).ttlSeconds;
+      newCachedContent.ttl = `${createOptions.ttlSeconds}s`;
+      delete newCachedContent.ttlSeconds;
     }
+
     if (!newCachedContent.model) {
-      throw new GoogleGenerativeAIRequestInputError(
-        "Cached content must contain a `model` field.",
-      );
+      throw new GoogleGenerativeAIRequestInputError("Cached content requires a `model` field.");
     }
+    
     if (!newCachedContent.model.includes("/")) {
-      // If path is not included, assume it's a non-tuned model.
       newCachedContent.model = `models/${newCachedContent.model}`;
     }
-    const url = new CachedContentUrl(
-      RpcTask.CREATE,
-      this.apiKey,
-      this._requestOptions,
-    );
-
-    const headers = getHeaders(url);
 
     const response = await makeServerRequest(
-      url,
-      headers,
-      JSON.stringify(newCachedContent),
+      new CachedContentUrl(RpcTask.CREATE, this.apiKey, this._requestOptions),
+      getHeaders(new CachedContentUrl(RpcTask.CREATE, this.apiKey, this._requestOptions)),
+      JSON.stringify(newCachedContent)
     );
     return response.json();
   }
 
   /**
-   * List all uploaded content caches
+   * Lists all uploaded content caches.
    */
   async list(listParams?: ListParams): Promise<ListCacheResponse> {
-    const url = new CachedContentUrl(
-      RpcTask.LIST,
-      this.apiKey,
-      this._requestOptions,
-    );
-    if (listParams?.pageSize) {
-      url.appendParam("pageSize", listParams.pageSize.toString());
-    }
-    if (listParams?.pageToken) {
-      url.appendParam("pageToken", listParams.pageToken);
-    }
-    const headers = getHeaders(url);
-    const response = await makeServerRequest(url, headers);
-    return response.json();
+    const url = new CachedContentUrl(RpcTask.LIST, this.apiKey, this._requestOptions);
+    if (listParams?.pageSize) url.appendParam("pageSize", listParams.pageSize.toString());
+    if (listParams?.pageToken) url.appendParam("pageToken", listParams.pageToken);
+    
+    return (await makeServerRequest(url, getHeaders(url))).json();
   }
 
   /**
-   * Get a content cache
+   * Retrieves a content cache by name.
    */
   async get(name: string): Promise<CachedContent> {
-    const url = new CachedContentUrl(
-      RpcTask.GET,
-      this.apiKey,
-      this._requestOptions,
-    );
+    const url = new CachedContentUrl(RpcTask.GET, this.apiKey, this._requestOptions);
     url.appendPath(parseCacheName(name));
-    const headers = getHeaders(url);
-    const response = await makeServerRequest(url, headers);
-    return response.json();
+    return (await makeServerRequest(url, getHeaders(url))).json();
   }
 
   /**
-   * Update an existing content cache
+   * Updates an existing content cache.
    */
-  async update(
-    name: string,
-    updateParams: CachedContentUpdateParams,
-  ): Promise<CachedContent> {
-    const url = new CachedContentUrl(
-      RpcTask.UPDATE,
-      this.apiKey,
-      this._requestOptions,
-    );
+  async update(name: string, updateParams: CachedContentUpdateParams): Promise<CachedContent> {
+    const url = new CachedContentUrl(RpcTask.UPDATE, this.apiKey, this._requestOptions);
     url.appendPath(parseCacheName(name));
-    const headers = getHeaders(url);
-    const formattedCachedContent: _CachedContentUpdateRequestFields = {
-      ...updateParams.cachedContent,
-    };
+    
+    const formattedCachedContent: _CachedContentUpdateRequestFields = { ...updateParams.cachedContent };
     if (updateParams.cachedContent.ttlSeconds) {
-      formattedCachedContent.ttl =
-        updateParams.cachedContent.ttlSeconds.toString() + "s";
-      delete (formattedCachedContent as CachedContentCreateParams).ttlSeconds;
+      formattedCachedContent.ttl = `${updateParams.cachedContent.ttlSeconds}s`;
+      delete formattedCachedContent.ttlSeconds;
     }
     if (updateParams.updateMask) {
-      url.appendParam(
-        "update_mask",
-        updateParams.updateMask.map((prop) => camelToSnake(prop)).join(","),
-      );
+      url.appendParam("update_mask", updateParams.updateMask.map(camelToSnake).join(","));
     }
-    const response = await makeServerRequest(
-      url,
-      headers,
-      JSON.stringify(formattedCachedContent),
-    );
-    return response.json();
+
+    return (await makeServerRequest(url, getHeaders(url), JSON.stringify(formattedCachedContent))).json();
   }
 
   /**
-   * Delete content cache with given name
+   * Deletes a content cache by name.
    */
   async delete(name: string): Promise<void> {
-    const url = new CachedContentUrl(
-      RpcTask.DELETE,
-      this.apiKey,
-      this._requestOptions,
-    );
+    const url = new CachedContentUrl(RpcTask.DELETE, this.apiKey, this._requestOptions);
     url.appendPath(parseCacheName(name));
-    const headers = getHeaders(url);
-    await makeServerRequest(url, headers);
+    await makeServerRequest(url, getHeaders(url));
   }
 }
 
 /**
- * If cache name is prepended with "cachedContents/", remove prefix
+ * Parses and validates the cache name.
  */
 function parseCacheName(name: string): string {
-  if (name.startsWith("cachedContents/")) {
-    return name.split("cachedContents/")[1];
-  }
   if (!name) {
-    throw new GoogleGenerativeAIError(
-      `Invalid name ${name}. ` +
-        `Must be in the format "cachedContents/name" or "name"`,
-    );
+    throw new GoogleGenerativeAIError("Invalid cache name. Must be 'cachedContents/name' or 'name'.");
   }
-  return name;
+  return name.startsWith("cachedContents/") ? name.split("cachedContents/")[1] : name;
 }
+
+/**
+ * Converts camelCase to snake_case.
+ */
 function camelToSnake(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
